@@ -10,12 +10,26 @@
     <version>1.0-SNAPSHOT</version>
     <packaging>jar</packaging>
     <name>Constant Pool Scanner</name>
+    <description>Simple utility to scan Java bytecode for class references in the constant pool.</description>
+    <url>https://github.com/jenkinsci/constant-pool-scanner</url>
     <licenses>
         <license>
             <name>NetBeans CDDL/GPL</name>
             <url>http://www.netbeans.org/cddl-gplv2.html</url>
         </license>
     </licenses>
+    <developers>
+        <developer>
+            <id>jglick</id>
+            <name>Jesse Glick</name>
+            <email>jglick@cloudbees.com</email>
+        </developer>
+    </developers>
+    <scm>
+        <connection>scm:git:git@github.com:jenkinsci/constant-pool-scanner.git</connection>
+        <developerConnection>scm:git:git@github.com:jenkinsci/constant-pool-scanner.git</developerConnection>
+        <url>git@github.com:jenkinsci/constant-pool-scanner.git</url>
+    </scm>
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
