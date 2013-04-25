@@ -48,6 +48,7 @@ import java.io.ByteArrayInputStream;
 import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.Arrays;
 import java.util.Set;
 import java.util.TreeSet;
@@ -66,8 +67,18 @@ public class ConstantPoolScanner {
      * @throws IOException in case of malformed bytecode
      */
     public static Set<String> dependencies(byte[] data) throws IOException {
+        return dependencies(new ByteArrayInputStream(data));
+    }
+
+    /**
+     * Examines the constant pool of a class file and looks for references to other classes.
+     * @param data a Java class file
+     * @return a (sorted) set of binary class names (e.g. {@code some.pkg.Outer$Inner})
+     * @throws IOException in case of malformed bytecode
+     */
+    public static Set<String> dependencies(InputStream in) throws IOException {
         Set<String> result = new TreeSet<String>();
-        DataInput input = new DataInputStream(new ByteArrayInputStream(data));
+        DataInput input = new DataInputStream(in);
         skip(input, 8); // magic, minor_version, major_version
         int size = input.readUnsignedShort() - 1; // constantPoolCount
         String[] utf8Strings = new String[size];
