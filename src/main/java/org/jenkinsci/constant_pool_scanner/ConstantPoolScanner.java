@@ -72,7 +72,7 @@ public class ConstantPoolScanner {
 
     /**
      * Examines the constant pool of a class file and looks for references to other classes.
-     * @param data a Java class file
+     * @param in Stream that reads a Java class file
      * @return a (sorted) set of binary class names (e.g. {@code some.pkg.Outer$Inner})
      * @throws IOException in case of malformed bytecode
      */
