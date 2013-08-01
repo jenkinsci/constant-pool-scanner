@@ -5,12 +5,10 @@ package org.jenkinsci.constant_pool_scanner;
  *
  * @author Kohsuke Kawaguchi
  */
-public final class Utf8Constant implements Constant, CharSequence {
+public final class Utf8Constant implements CharSequence {
     String actual;
 
     public String get() {
-        if (actual==null)
-            throw new IllegalStateException();
         return actual;
     }
 
@@ -24,5 +22,10 @@ public final class Utf8Constant implements Constant, CharSequence {
 
     public String subSequence(int start, int end) {
         return get().substring(start,end);
+    }
+
+    @Override
+    public String toString() {
+        return actual;
     }
 }

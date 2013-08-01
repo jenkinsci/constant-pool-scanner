@@ -5,21 +5,42 @@ package org.jenkinsci.constant_pool_scanner;
  *
  * @author Kohsuke Kawaguchi
  */
-public final class MemberRefConstant implements Constant {
+public abstract class MemberRefConstant {
     ClassConstant clazz;
     NameAndTypeConstant nameAndType;
 
     /**
+     * Gets the internal name of the class that contains method/field in question.
+     */
+    public String getClazz() {
+        return clazz.get();
+    }
+
+    /**
      * Class that contains the method/field in question.
      */
-    public ClassConstant getClazz() {
+    public ClassConstant getClassConstant() {
         return clazz;
+    }
+
+    /**
+     * Name of the field/method.
+     */
+    public String getName() {
+        return nameAndType.getName();
+    }
+
+    /**
+     * Its type descriptor, a combination of field/method return type and parameter types.
+     */
+    public String getDescriptor() {
+        return nameAndType.getDescriptor();
     }
 
     /**
      * Signature of the method/field.
      */
-    public NameAndTypeConstant getNameAndType() {
+    public NameAndTypeConstant getNameAndTypeConstant() {
         return nameAndType;
     }
 

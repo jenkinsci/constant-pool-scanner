@@ -5,12 +5,14 @@ package org.jenkinsci.constant_pool_scanner;
  *
  * @author Kohsuke Kawaguchi
  */
-public final class StringConstant implements Constant {
-    private Utf8Constant actual;
+public final class StringConstant {
+    private final Utf8Constant actual;
+
+    StringConstant(Utf8Constant actual) {
+        this.actual = actual;
+    }
 
     public String get() {
-        if (actual==null)
-            throw new IllegalStateException();
         return actual.get();
     }
 }

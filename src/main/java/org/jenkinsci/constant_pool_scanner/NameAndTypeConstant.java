@@ -5,25 +5,32 @@ package org.jenkinsci.constant_pool_scanner;
  *
  * @author Kohsuke Kawaguchi
  */
-public final class NameAndTypeConstant implements Constant {
+public final class NameAndTypeConstant {
     private Utf8Constant name;
     private Utf8Constant descriptor;
 
     /**
      * Name of the field/method.
      */
-    public Utf8Constant getName() {
-        if (name==null)
-            throw new IllegalStateException();
+    public String getName() {
+        return name.get();
+    }
+
+    public Utf8Constant getNameUTF8() {
         return name;
     }
 
     /**
      * Its type descriptor, a combination of field/method return type and parameter types.
      */
-    public Utf8Constant getDescriptor() {
-        if (descriptor==null)
-            throw new IllegalStateException();
+    public String getDescriptor() {
+        return descriptor.get();
+    }
+
+    /**
+     * Its type descriptor, a combination of field/method return type and parameter types.
+     */
+    public Utf8Constant getDescriptorUTF8() {
         return descriptor;
     }
 

@@ -50,9 +50,12 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Arrays;
-import java.util.HashSet;
+import java.util.Collection;
+import java.util.EnumSet;
 import java.util.Set;
 import java.util.TreeSet;
+
+import static org.jenkinsci.constant_pool_scanner.ConstantType.*;
 
 /**
  * Streaming parser of the constant pool in a Java class file.
@@ -79,37 +82,12 @@ public class ConstantPoolScanner {
      * @throws IOException in case of malformed bytecode
      */
     public static Set<String> dependencies(InputStream in) throws IOException {
-        final Set<Utf8Constant> classNames = new HashSet<Utf8Constant>();
-        final Set<Utf8Constant> descriptors = new HashSet<Utf8Constant>();
-
-        new ConstantPoolScanner().parse(in, new ConstantPoolVisitor() {
-            @Override
-            public void onClass(ClassConstant value) {
-                classNames.add(value.get());
-            }
-
-            @Override
-            public void onNameAndType(NameAndTypeConstant value) {
-                descriptors.add(value.getDescriptor());
-            }
-        });
+        ConstantPool pool = parse(in,CLASS,NAME_AND_TYPE);
 
         Set<String> result = new TreeSet<String>();
-        for (Utf8Constant utf : descriptors) {
-            String s = utf.get();
-            int idx = 0;
-            while ((idx = s.indexOf('L', idx)) != -1) {
-                int semi = s.indexOf(';', idx);
-                if (semi == -1) {
-                    throw new IOException("Invalid type or descriptor: " + s);
-                }
-                result.add(s.substring(idx + 1, semi).replace('/', '.'));
-                idx = semi;
-            }
-        }
 
-        for (Utf8Constant utf : classNames) {
-            String s = utf.get();
+        for (ClassConstant cc : pool.list(ClassConstant.class)) {
+            String s = cc.get();
             while (s.charAt(0) == '[') {
                 // array type
                 s = s.substring(1);
@@ -128,192 +106,152 @@ public class ConstantPoolScanner {
             result.add(c.replace('/', '.'));
         }
 
+        for (NameAndTypeConstant cc : pool.list(NameAndTypeConstant.class)) {
+            String s = cc.getDescriptor();
+            int idx = 0;
+            while ((idx = s.indexOf('L', idx)) != -1) {
+                int semi = s.indexOf(';', idx);
+                if (semi == -1) {
+                    throw new IOException("Invalid type or descriptor: " + s);
+                }
+                result.add(s.substring(idx + 1, semi).replace('/', '.'));
+                idx = semi;
+            }
+        }
+
         return result;
     }
 
-    /**
-     * Class file being parsed.
-     */
-    private DataInput source;
-    /**
-     * Constants that are discovered and pre-created at the point of reference.
-     */
-    private Constant[] constants;
-    /**
-     * Index of the current constant getting passed to the visitor.
-     */
-    private int index;
-    /**
-     * Constant type of the current constant getting passed to the visitor.
-     */
-    private byte tag;
-    /**
-     * Whether the current constant is read.
-     */
-    private boolean readTag;
-
-    public ConstantPoolScanner() {
+    private ConstantPoolScanner() {
     }
 
     /**
      * Parses a class file and invokes the visitor with constants.
      */
-    public void parse(byte[] source, ConstantPoolVisitor visitor) throws IOException {
-        parse(new ByteArrayInputStream(source),visitor);
+    public static ConstantPool parse(byte[] source, ConstantType... types) throws IOException {
+        return parse(new ByteArrayInputStream(source),types);
     }
 
     /**
      * Parses a class file and invokes the visitor with constants.
      */
-    public void parse(InputStream source, ConstantPoolVisitor visitor) throws IOException {
-        parse((DataInput)new DataInputStream(source),visitor);
+    public static ConstantPool parse(InputStream source, ConstantType... types) throws IOException {
+        return parse(new DataInputStream(source),Arrays.asList(types));
     }
 
     /**
      * Parses a class file and invokes the visitor with constants.
      */
-    public void parse(final DataInput source, ConstantPoolVisitor visitor) throws IOException {
-        try {
-            this.source = source;
+    public static ConstantPool parse(DataInput s, Collection<ConstantType> _collect) throws IOException {
+        skip(s,8); // magic, minor_version, major_version
+        int size = s.readUnsignedShort() - 1; // constantPoolCount
+        ConstantPool pool = new ConstantPool(size);
 
-            skip(8); // magic, minor_version, major_version
-            int size = source.readUnsignedShort() - 1; // constantPoolCount
-            constants = new Constant[size];
+        // figure out all the types of constants we need to collect
+        final EnumSet<ConstantType> collect = transitiveClosureOf(_collect);
 
-            /**
-             * This object parses bytes into primitive values lazily.
-             */
-            final Reader r = new Reader() {
-                public Object read() throws IOException {
-                    if (readTag)
-                        throw new IllegalStateException("Constant was already read");
-                    readTag = true;
-
-                    switch (tag) {
-                    case 1: // CONSTANT_Utf8
-                        return utf8At(index);
-                    case 7: // CONSTANT_Class
-                        return classAt(index);
-                    case 3: // CONSTANT_Integer
-                        return source.readInt();
-                    case 4: // CONSTANT_Float
-                        return source.readFloat();
-                    case 9: // CONSTANT_Fieldref
-                    case 10: // CONSTANT_Methodref
-                    case 11: // CONSTANT_InterfaceMethodref
-                        return memberRefAt(index);
-                    case 12: // CONSTANT_NameAndType
-                        return nameAndTypeAt(index);
-                    case 8: // CONSTANT_String
-                        return utf8At(readIndex());
-                    case 5: // CONSTANT_Long
-                        return source.readLong();
-                    case 6: // CONSTANT_Double
-                        return source.readDouble();
-                    default:
-                        throw new IllegalStateException();
-                    }
-                }
-            };
-
-            for (int i = 0; i < size; i++) {
-                index = i;
-                tag = source.readByte();
-                readTag = false;
-
-                switch (tag) {
-                    case 1: // CONSTANT_Utf8
-                        visitor.onUTF8(utf8At(i).actual = source.readUTF());
-                        break;
-                    case 7: // CONSTANT_Class
-                        visitor.onClass(classAt(i).set(utf8At(readIndex())));
-                        break;
-                    case 3: // CONSTANT_Integer
-                        visitor.onInteger(r);
-                        consumeTag(4);
-                        break;
-                    case 4: // CONSTANT_Float
-                        visitor.onFloat(r);
-                        consumeTag(4);
-                        break;
-                    case 9: // CONSTANT_Fieldref
-                        visitor.onFieldRef(
-                               memberRefAt(i).set(classAt(readIndex()),nameAndTypeAt(readIndex())));
-                        break;
-                    case 10: // CONSTANT_Methodref
-                        visitor.onMethodRef(
-                                memberRefAt(i).set(classAt(readIndex()), nameAndTypeAt(readIndex())));
-                        break;
-                    case 11: // CONSTANT_InterfaceMethodref
-                        visitor.onInterfaceMethodRef(
-                                memberRefAt(i).set(classAt(readIndex()), nameAndTypeAt(readIndex())));
-                        break;
-                    case 12: // CONSTANT_NameAndType
-                        visitor.onNameAndType(
-                                nameAndTypeAt(i).set(utf8At(readIndex()),utf8At(readIndex())));
-                        break;
-                    case 8: // CONSTANT_String
-                        visitor.onString(utf8At(readIndex()));
-                        break;
-                    case 5: // CONSTANT_Long
-                        visitor.onLong(r);
-                        consumeTag(8);
-                        i++; // weirdness in spec
-                        break;
-                    case 6: // CONSTANT_Double
-                        visitor.onDouble(r);
-                        consumeTag(8);
-                        i++; // weirdness in spec
-                        break;
-                    default:
-                        throw new IOException("Unrecognized constant pool tag " + tag + " at index " + i +
-                                "; running constants: " + Arrays.asList(constants));
-                }
+        for (int i = 0; i < size; i++) {
+            int tag = s.readByte();
+            switch (tag) {
+                case 1: // CONSTANT_Utf8
+                    if (collect.contains(UTF8))
+                        pool.utf8At(i).actual = s.readUTF();
+                    else
+                        skip(s,s.readUnsignedShort());
+                    break;
+                case 7: // CONSTANT_Class
+                    if (collect.contains(CLASS))
+                        pool.classAt(i).set(pool.utf8At(readIndex(s)));
+                    else
+                        skip(s,2);
+                    break;
+                case 3: // CONSTANT_Integer
+                    if (collect.contains(INTEGER))
+                        pool.set(i,s.readInt());
+                    else
+                        skip(s,4);
+                    break;
+                case 4: // CONSTANT_Float
+                    if (collect.contains(FLOAT))
+                        pool.set(i,s.readFloat());
+                    else
+                        skip(s,4);
+                    break;
+                case 9: // CONSTANT_Fieldref
+                    if (collect.contains(FIELD_REF))
+                        pool.fieldRefAt(i).set(pool.classAt(readIndex(s)),pool.nameAndTypeAt(readIndex(s)));
+                    else
+                        skip(s,4);
+                    break;
+                case 10: // CONSTANT_Methodref
+                    if (collect.contains(METHOD_REF))
+                        pool.methodRefAt(i).set(pool.classAt(readIndex(s)),pool.nameAndTypeAt(readIndex(s)));
+                    else
+                        skip(s,4);
+                    break;
+                case 11: // CONSTANT_InterfaceMethodref
+                    if (collect.contains(INTERFACE_METHOD_REF))
+                        pool.interfaceMethodRefAt(i).set(pool.classAt(readIndex(s)),pool.nameAndTypeAt(readIndex(s)));
+                    else
+                        skip(s,4);
+                    break;
+                case 12: // CONSTANT_NameAndType
+                    if (collect.contains(NAME_AND_TYPE))
+                        pool.nameAndTypeAt(i).set(pool.utf8At(readIndex(s)),pool.utf8At(readIndex(s)));
+                    else
+                        skip(s,4);
+                    break;
+                case 8: // CONSTANT_String
+                    if (collect.contains(STRING))
+                        pool.set(i, new StringConstant(pool.utf8At(readIndex(s))));
+                    break;
+                case 5: // CONSTANT_Long
+                    if (collect.contains(LONG))
+                        pool.set(i,s.readLong());
+                    else
+                        skip(s,8);
+                    i++; // weirdness in spec
+                    break;
+                case 6: // CONSTANT_Double
+                    if (collect.contains(DOUBLE))
+                        pool.set(i,s.readDouble());
+                    else
+                        skip(s,8);
+                    i++; // weirdness in spec
+                    break;
+                case 15:// CONSTANT_MethodHandle
+                    skip(s,3);
+                    break;
+                case 16:// CONSTANT_MethodType
+                    skip(s,2);
+                    break;
+                case 18:// CONSTANT_INVOKE_DYNAMIC
+                    skip(s,4);
+                    break;
+                default:
+                    throw new IOException("Unrecognized constant pool tag " + tag + " at index " + i +
+                            "; running constants: " + pool);
             }
-        } finally {
-            this.source = null;
-            this.constants = null;
-            this.tag = -1;
         }
+
+        return pool;
     }
 
-    private void consumeTag(int size) throws IOException {
-        if (!readTag)
-            skip(size);
+    private static EnumSet<ConstantType> transitiveClosureOf(Collection<ConstantType> collect) {
+        EnumSet<ConstantType> subject = EnumSet.copyOf(collect);
+        for (ConstantType c : collect) {
+            subject.addAll(c.implies);
+        }
+        return subject;
     }
 
-    private NameAndTypeConstant nameAndTypeAt(int i) {
-        if (constants[i]==null)
-            constants[i] = new NameAndTypeConstant();
-        return (NameAndTypeConstant)constants[i];
-    }
-
-    private MemberRefConstant memberRefAt(int i) {
-        if (constants[i]==null)
-            constants[i] = new MemberRefConstant();
-        return (MemberRefConstant)constants[i];
-    }
-
-    private ClassConstant classAt(int i) {
-        if (constants[i]==null)
-            constants[i] = new ClassConstant();
-        return (ClassConstant)constants[i];
-    }
-
-    private Utf8Constant utf8At(int i) {
-        if (constants[i]==null)
-            constants[i] = new Utf8Constant();
-        return (Utf8Constant)constants[i];
-    }
-
-    private void skip(int bytes) throws IOException {
+    private static void skip(DataInput source, int bytes) throws IOException {
         // skipBytes cannot be used reliably because 0 is a valid return value
         // and we can end up looping forever
         source.readFully(new byte[bytes]);
     }
 
-    private int readIndex() throws IOException {
+    private static int readIndex(DataInput source) throws IOException {
         return source.readUnsignedShort() - 1;
     }
-
 }
