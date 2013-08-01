@@ -204,6 +204,8 @@ public class ConstantPoolScanner {
                 case 8: // CONSTANT_String
                     if (collect.contains(STRING))
                         pool.set(i, new StringConstant(pool.utf8At(readIndex(s))));
+                    else
+                        skip(s,2);
                     break;
                 case 5: // CONSTANT_Long
                     if (collect.contains(LONG))
