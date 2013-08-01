@@ -1,8 +1,7 @@
 package org.jenkinsci.constant_pool_scanner;
 
 import java.util.Arrays;
-import java.util.EnumSet;
-import java.util.Set;
+import java.util.List;
 
 /**
  * Types of constants.
@@ -35,7 +34,7 @@ public enum ConstantType {
      * Collection of this type of constant requires collecting them as well.
      * The set is transitive.
      */
-    final Set<ConstantType> implies;
+    final List<ConstantType> implies;
 
     /**
      * Constant pool tag
@@ -45,7 +44,7 @@ public enum ConstantType {
     ConstantType(int tag, Class valueType, ConstantType... implies) {
         this.tag = tag;
         this.valueType = valueType;
-        this.implies = EnumSet.copyOf(Arrays.asList(implies));
+        this.implies = Arrays.asList(implies);
     }
 
     private static final ConstantType[] byTag = new ConstantType[20];
